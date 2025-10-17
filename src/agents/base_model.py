@@ -3,12 +3,12 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models import BaseChatModel
 
 from agents.agent import Agent
-from src.graphstate import GraphState
-from AGENT_PROMPTS import SYSTEM_PROMPTS
+from graphstate import GraphState
+from agents.AGENT_PROMPTS import SYSTEM_PROMPTS
 
 
 class BaseModel(Agent):
-    def __init__(self, base_model: BaseChatModel, rank):
+    def __init__(self, base_model: BaseChatModel, rank: int):
         """
         base_model - base model 
         """
@@ -21,13 +21,21 @@ class BaseModel(Agent):
         return f"BaseModel_{self.rank}"
 
     def _execute(self, state: GraphState, **kwargs) -> GraphState:
-        question, context = state["question_context"]
+        question = state["question"]
+        context = state["context"]
         response = self.genai.invoke({"question": question, "context": context})
         model_dict = {
-            "response": response,
-            "hallu_type": None,  # Placeholder for hallucination type
-            "reason": "",  #  Placeholder for hallucination reason
+            f"BaseModel_{self.rank}": 
+                {
+                    "response": response,
+                    "hallu_type_int": None,  # Placeholder for hallucination type
+                    "reason": "",  #  Placeholder for hallucination reason
+                }
         }
-        state["responses"] = model_dict
+        # Merge this model's output into state['responses'] so multiple models
+        # can run in parallel and contribute their entries without clobbering.
+        if "responses" not in state or not isinstance(state["responses"], dict):
+            state["responses"] = {}
+        state["responses"].update(model_dict)
         return state
 

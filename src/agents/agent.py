@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from src.graphstate import GraphState
+from graphstate import GraphState
 
 class Agent(ABC):
 

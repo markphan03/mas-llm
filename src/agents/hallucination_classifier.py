@@ -1,12 +1,27 @@
 from pydantic import BaseModel, Field
 from langchain.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from typing import Any
 
 from src.graphstate import GraphState
 from agents.agent import Agent
 from agents.AGENT_PROMPTS import SYSTEM_PROMPTS
 
-class HallucinationType(BaseModel):
+# TODO: Create HallucinationType as a BERT classification model
+
+HALLU_DICT = {
+    0: "NOT_HALLUCINATED",
+    1: "FACTUAL_FABRICATION",
+    2: "FACTUAL_CONTRADICTION",
+    3: "INSTRUCTION_INCONSISTENCY",
+    4: "CONTEXT_INCONSISTENCY",
+    5: "LOGICAL_INCONSISTENCY",
+}
+
+# class HallucinationTypeBERT(BaseModel):
+#     """BERT Classification model output for hallucination type."""
+
+class HallucinationType(BaseModel): 
     hallu_type: int = Field(
         description=(
             "Integer code for hallucination type (0..5) where 0=NOT_HALLUCINATED, "
@@ -18,17 +33,22 @@ class HallucinationType(BaseModel):
 
 class HallucinationClassifier(Agent):
     def __init__(self, base_model: Any, **kwargs):
-
-        # TODO: 
-        hallu_prompt = ChatPromptTemplate.from_messages(
+        hallu_type_prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", SYSTEM_PROMPTS["hallucination_checker"]),
-                ("human", "Set of facts: \n\n {documents} \n\n LLM generation: {generation}"),
+                ("system", SYSTEM_PROMPTS["hallu_classifier"]),
+                ("human", "Question {question} \n\n Context: \n\n {context} \n\n LLM generation: {generation}"),
+            ]
+        )
+
+        hallu_reason_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", SYSTEM_PROMPTS["hallu_reason"]),
+                ("human", "Question {question} \n\n Context: \n\n {documents} \n\n LLM generation: {generation} \\n Hallucnation type: {hallu_type}"),
             ]
         )
         hallu_classifier = base_model.with_structured_output(HallucinationType)
-        self.hallu_type_classifier_chain = hallu_prompt | hallu_classifier
-        # self.hallu_classifier_reason_chain = 
+        self.hallu_type_classifier_chain = hallu_type_prompt | hallu_classifier
+        self.hallu_classifier_reason_chain = hallu_reason_prompt | base_model | StrOutputParser()
         super().__init__(**kwargs)
 
     def get_name(self):
@@ -47,7 +67,7 @@ class HallucinationClassifier(Agent):
         attaches `hallu_type` and a placeholder `reason` to each entry.
         """
         try:
-            question, context = state.get("question_context", (None, None))
+            question, context = state.get("question_context")
         except Exception:
             question, context = (None, None)
 
@@ -66,14 +86,27 @@ class HallucinationClassifier(Agent):
 
             try:
                 out = self.hallu_type_classifier_chain.invoke(
-                    {"documents": context, "generation": response}
+                    {"question": question, "documents": context, "generation": response}
                 )
-                hallu_type = out.hallu_type
+                hallu_type_int = out.hallu_type
             except Exception:
-                hallu_type = None
+                hallu_type_int = None
 
-            state["responses"][model_name]["hallu_type"] = hallu_type
-            state["responses"][model_name]["reason"] = ""  # TODO: Add reason generation logic
+            hallu_type = HALLU_DICT[hallu_type_int] if hallu_type_int in HALLU_DICT else "UNKNOWN"
+            try:
+                reason = self.hallu_classifier_reason_chain.invoke(
+                    {
+                        "question": question,
+                        "documents": context,
+                        "generation": response,
+                        "hallu_type": hallu_type,
+                    }
+                )
+            except Exception:
+                reason = ""
+
+            state["responses"][model_name]["hallu_type_int"] = hallu_type_int
+            state["responses"][model_name]["reason"] = reason
 
         return state
 
