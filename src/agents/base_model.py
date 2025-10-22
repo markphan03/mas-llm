@@ -13,18 +13,20 @@ class BaseModel(Agent):
         base_model - base model 
         """
         self.base_model = base_model
+        # Prefer common attributes if present, otherwise fall back to the class name
+        self.model_name = getattr(base_model, "model", None) or getattr(base_model, "model_name", base_model.__class__.__name__)
         self.rank = rank
         prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["genai"])
         self.genai = prompt | base_model | StrOutputParser()
 
     def get_name(self) -> str:
-        return f"BaseModel_{self.rank}"
+        return f"BaseModel_{self.rank}_{self.model_name}"
 
-    def _execute(self, state: GraphState, **kwargs) -> GraphState:
+    def _execute(self, state: GraphState, **kwargs):
         
         response = self.genai.invoke({"question": state["question"], "context": state["context"]})
         model_dict = {
-            f"BaseModel_{self.rank}": 
+            f"BaseModel_{self.rank}_{self.model_name}": 
                 {
                     "response": response,
                     "hallu_type": (None, "UNKNOWN"),  # Placeholder for hallucination type

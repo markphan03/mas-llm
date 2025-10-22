@@ -4,7 +4,7 @@ from graphstate import GraphState
 class Agent(ABC):
 
     @abstractmethod
-    def _execute(self, state: GraphState, **kwargs) -> GraphState:
+    def _execute(self, state: GraphState, **kwargs):
         pass
 
     @abstractmethod
@@ -12,6 +12,6 @@ class Agent(ABC):
         """Return the agent’s name."""
         pass
 
-    def execute(self, state: GraphState, **kwargs) -> GraphState:
+    def execute(self, state: GraphState, **kwargs):
         return self._execute(state, **kwargs)
         
