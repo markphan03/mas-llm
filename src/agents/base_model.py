@@ -21,21 +21,51 @@ class BaseModel(Agent):
         return f"BaseModel_{self.rank}"
 
     def _execute(self, state: GraphState, **kwargs) -> GraphState:
-        question = state["question"]
-        context = state["context"]
-        response = self.genai.invoke({"question": question, "context": context})
+        
+        response = self.genai.invoke({"question": state["question"], "context": state["context"]})
         model_dict = {
             f"BaseModel_{self.rank}": 
                 {
                     "response": response,
-                    "hallu_type_int": None,  # Placeholder for hallucination type
+                    "hallu_type": (None, "UNKNOWN"),  # Placeholder for hallucination type
                     "reason": "",  #  Placeholder for hallucination reason
                 }
         }
         # Merge this model's output into state['responses'] so multiple models
         # can run in parallel and contribute their entries without clobbering.
-        if "responses" not in state or not isinstance(state["responses"], dict):
-            state["responses"] = {}
-        state["responses"].update(model_dict)
-        return state
+        # if "responses" not in state or not isinstance(state["responses"], dict):
+        #     state["responses"] = {}
+        # state["responses"].update(model_dict)
+        # print(state["question"])
+        return {"responses": model_dict}
+      
+
+    # def _execute(self, state: GraphState, **kwargs) -> GraphState:
+    #     def _run(state: GraphState):
+           
+    #         prompt = ChatPromptTemplate.from_messages([
+    #             (
+    #                 "system",
+    #                 "You are a thoughtful and supportive assistant who provides emotionally intelligent and practical advice."
+    #             ),
+    #             (
+    #                 "user",
+    #                 (
+    #                     "Given the context below, provide a calm, healthy, and actionable response.\n\n"
+    #                     "Context: {context}\n\n"
+    #                     "Question: {question}\n\n"
+    #                     "Your response should focus on emotional well-being, mindset improvement, and practical steps."
+    #                 ),
+    #             ),
+    #         ])
+    #         chain = prompt | self.base_model | StrOutputParser()
+
+    #         answer = chain.invoke({
+    #             "question": state["question"],
+    #             "context": state["context"],
+    #         })
+
+    #         return {"responses": {self.base_model.get_name(): answer}}
+
+    #     return _run
 
