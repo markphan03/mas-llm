@@ -1,6 +1,6 @@
 import random
 import numpy as np
-import torch
+# import torch
 
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
@@ -9,8 +9,7 @@ from langchain_core.language_models import BaseChatModel
 
 from graphstate import GraphState
 from workflow import create_graph
-from agents.base_model import BaseModel
-from agents.hallucination_classifier import HallucinationClassifier
+from agents.agent import Agent
 import pprint
 
 
@@ -18,7 +17,7 @@ import pprint
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
-torch.manual_seed(SEED)
+# torch.manual_seed(SEED)
 
 # --- Ollama models with deterministic parameters ---
 def make_deterministic_model(model_name: str):
@@ -32,15 +31,16 @@ def make_deterministic_model(model_name: str):
 
 # Wrap ChatOllama instances with BaseModel so they expose `execute`
 base_models = [
-    BaseModel(make_deterministic_model("llama3.1"), rank=1),
-    BaseModel(make_deterministic_model("deepseek-r1"), rank=2),
+    Agent(ChatOllama(model="llama3.1"), rank=1),
+    Agent(ChatOllama(model="llama3.1"), rank=2),
+    Agent(ChatOllama(model="llama3.1"), rank=3),
 ]
 
-hallu_classifier = HallucinationClassifier(make_deterministic_model("deepseek-r1"))
+
 
 # --- Run example ---
-# --- Example Run ---
-inputs = {
+inputs: GraphState = {
+    
     "question": "What is the capital of France?",
     "context": (
         "Paris first became the capital of France in 508 AD under King Clovis I. "
@@ -50,10 +50,10 @@ inputs = {
     ),
 }
 
-graph = create_graph(base_models, hallu_classifier)
+graph = create_graph(base_models)
 
 # Run graph — this returns the **final merged output**
-final_state = graph.invoke(inputs)
+final_state = graph.invoke(inputs, {"recursion_limit": 100,})
 
 # Pretty print cleanly
 pprint.pprint(final_state)

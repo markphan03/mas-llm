@@ -1,29 +1,41 @@
 from langgraph.graph import StateGraph, START, END
-from agents.base_model import BaseModel
-from agents.hallucination_classifier import HallucinationClassifier
+from agents.agent import Agent
 
 from graphstate import GraphState
 
 
 def create_graph(
-    base_models: list[BaseModel],
-    hallu_classifier: HallucinationClassifier,
+    agents: list[Agent],
 ):
     workflow = StateGraph(GraphState)
 
     # create agents (LLM nodes)
-    for base_model in base_models:
-        workflow.add_node(base_model.get_name(), base_model.execute)
+    for agent in agents:
+        workflow.add_node(agent.get_name(), agent.execute)
 
-    # create Hallu Classifier
-    workflow.add_node(hallu_classifier.get_name(), hallu_classifier.execute)
 
-    for base_model in base_models:
-        workflow.add_edge(START, base_model.get_name())
-        # workflow.add_edge(base_model.get_name(),END)
-        workflow.add_edge(base_model.get_name(), hallu_classifier.get_name())
 
-    workflow.add_edge(hallu_classifier.get_name(), END)
+    for agent in agents:
+        workflow.add_edge(START, agent.get_name())
+        for other_model in agents:
+            if agent != other_model:
+                print(f"Connect {agent.get_name()} with {other_model.get_name()}")   
+                # workflow.add_edge(agent.get_name(), other_model.get_name())
 
+        workflow.add_conditional_edges(
+            agent.get_name(),
+            agent.is_done,
+            {
+                True: END,
+                False: agent.get_name()
+            },
+        )
+        # workflow.add_edge(agent.get_name(), END)
+
+        
+            
+
+        
+   
 
     return workflow.compile()
