@@ -4,3 +4,7 @@ langchain-ollama
 langgraph==0.3.5
 pyodbc==5.2.0
 scikit-learn==1.5.2
+nltk
+rouge-score
+numpy
+datasets

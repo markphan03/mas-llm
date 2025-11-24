@@ -6,6 +6,10 @@ from agents.base_agent import BaseAgent
 from graphstate import GraphState
 from agents.AGENT_PROMPTS import SYSTEM_PROMPTS
 
+import re
+import json
+
+NUMBER_OF_AGENTS = 3
 
 class Agent(BaseAgent):
     def __init__(self, base_model: BaseChatModel, rank: int):
@@ -15,79 +19,86 @@ class Agent(BaseAgent):
         self.base_model = base_model
         self.rank = rank
         self.name = self.get_name()
-        self.stop = False
+        self.response = ""
+        self.other_responses = {}
+        self.vote = {}
+        self.is_execute = True  # True when agent is on - False when agent is off(executing job)
         prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["genai"])
         self.genai = prompt | base_model | StrOutputParser()
+        voting_prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["voting"])
+        self.voting_ai = voting_prompt | base_model | StrOutputParser()
 
     def get_name(self) -> str:
         return f"agent_{self.rank}"
     
-    def is_done(self, state: GraphState, **kwargs):
-        # if state["responses"][self.name]["other_responses"] is not None:
-        #     print("Is Done executing")
-        #     return True
-        # return False
-        if self.stop:
-            return True
-        return False
-
+    def is_continue(self, state, **kwargs):
+        return self.is_execute
+    
+    def extract_json(self, text: str) -> str:
+        match = re.search(r"\{(?:[^{}]|(?:\{[^{}]*\}))*\}", text)
+        if not match:
+            return None
+        return json.loads(match.group(0))
+    
     def _execute(self, state: GraphState, **kwargs) -> GraphState:
-        
         model_dict = {
-            self.name: 
+                self.name: 
                     {
                         "model_name": self.base_model.model_dump().get("model"),
-                        "response": "",
-                        "other_responses": {},
-                        "vote": [],
+                        "response": self.response,
+                        "other_responses": self.other_responses,
+                        "vote": self.vote,
                     }
-        }
-        
-        if state["responses"] is None or \
-            self.name not in state["responses"].keys():
-            response = self.genai.invoke({"question": state["question"], "context": state["context"]})
-            model_dict[self.name]["response"] = response
-        else:
-            
-            self.stop = True
-                # for i in range(3):
-                #     current_agent = f"agent_{i+1}"
-                #     if current_agent != self.name:
-                #         model_dict[self.name]["other_responses"] = \
-                #             {current_agent: state["responses"][current_agent]["response"]}
-                        
-            # print(model_dict)
-        
-        
-        return {"responses": model_dict}
+
+            }
       
+        # Get the current response entry (or None if missing)
+        agent_state = state["responses"].get(self.name, {})
+        existing_response = (
+            agent_state
+            .get("response")
+        )
 
-    # def _execute(self, state: GraphState, **kwargs) -> GraphState:
-    #     def _run(state: GraphState):
-           
-    #         prompt = ChatPromptTemplate.from_messages([
-    #             (
-    #                 "system",
-    #                 "You are a thoughtful and supportive assistant who provides emotionally intelligent and practical advice."
-    #             ),
-    #             (
-    #                 "user",
-    #                 (
-    #                     "Given the context below, provide a calm, healthy, and actionable response.\n\n"
-    #                     "Context: {context}\n\n"
-    #                     "Question: {question}\n\n"
-    #                     "Your response should focus on emotional well-being, mindset improvement, and practical steps."
-    #                 ),
-    #             ),
-    #         ])
-    #         chain = prompt | self.base_model | StrOutputParser()
+        # Step 1: Generate its own response
+        if existing_response is None:
+            self.response = self.genai.invoke({
+                "question": state["question"],
+                "context": state["context"]
+            })
+            
+            model_dict[self.name]["response"] = self.response
 
-    #         answer = chain.invoke({
-    #             "question": state["question"],
-    #             "context": state["context"],
-    #         })
+        # Step 2: Gather other agents' responses
+        for i in range(1, NUMBER_OF_AGENTS+1):
+            current_agent = f"agent_{i}"
+            if current_agent != self.name:
+                current_agent_response = (
+                    state["responses"]
+                    .get(current_agent, {})
+                    .get("response")
+                )
+                if current_agent_response is not None:
+                    self.other_responses[current_agent] = current_agent_response
 
-    #         return {"responses": {self.base_model.get_name(): answer}}
+        # Step 3: Vote other agents' responses
+        if len(self.other_responses) == NUMBER_OF_AGENTS-1:
+            model_dict[self.name]["other_responses"] = self.other_responses
 
-    #     return _run
+            # voting 
+            self.vote = self.voting_ai.invoke({
+                "question": state["question"],
+                "context": state["context"],
+                "other_responses": model_dict[self.name]["other_responses"],
+            })
+
+            print(self.vote)
+            self.vote = self.extract_json(self.vote)
+
+            model_dict[self.name]["vote"] = self.vote
+
+            self.is_execute = False
+
+        return {"responses": model_dict}
+
+      
 
