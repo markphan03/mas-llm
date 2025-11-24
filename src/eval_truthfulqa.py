@@ -114,7 +114,7 @@ rouge = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
 #  MAIN EVALUATION LOOP
 # =======================================
 for i, sample in enumerate(train_samples):
-    if i == 3:  # Limit to first 100 samples for quicker testing
+    if i == 100:  # Limit to first 100 samples for quicker testing
         break
     question = sample.get("Question", "").strip()
     gold_answer = sample.get("Best Answer", "").strip()
