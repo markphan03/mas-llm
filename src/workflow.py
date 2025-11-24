@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, START, END
 from agents.agent import Agent
 
 from graphstate import GraphState
-from vote import Vote
+from agents.vote import Vote
 
 
 

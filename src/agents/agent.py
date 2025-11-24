@@ -91,7 +91,6 @@ class Agent(BaseAgent):
                 "other_responses": model_dict[self.name]["other_responses"],
             })
 
-            print(self.vote)
             self.vote = self.extract_json(self.vote)
 
             model_dict[self.name]["vote"] = self.vote

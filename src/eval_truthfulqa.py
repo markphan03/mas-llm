@@ -11,7 +11,7 @@ from langchain_ollama import ChatOllama
 from graphstate import GraphState
 from workflow import create_graph
 from agents.agent import Agent
-from vote import Vote
+from agents.vote import Vote
 
 
 # =======================================
