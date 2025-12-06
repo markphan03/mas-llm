@@ -60,9 +60,10 @@ class Vote:
 
         for _, agent_res in responses.items():
             votes = agent_res["vote"]
-            for agent, decision in votes.items():
-                if decision == "approve":
-                    scores[agent] += 1
+            if votes is not None:
+                for agent, decision in votes.items():
+                    if decision == "approve":
+                        scores[agent] += 1
 
         return scores
 

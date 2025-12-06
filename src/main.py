@@ -121,7 +121,7 @@ def generate_final_answer(voting_state: Dict[str, Any], agents: list[Agent], md_
 # ===========================
 #  WRITE TO MARKDOWN FILE
 # ===========================
-def write_output_to_markdown(final_state, final_result, filename="../docs/final_output.md"):
+def write_output_to_markdown(final_state, final_result, filename="final_output.md"):
     md_buffer = StringIO()
 
     md_buffer.write("# Multi-Agent Voting Result\n\n")

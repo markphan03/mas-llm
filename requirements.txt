@@ -8,3 +8,4 @@ nltk
 rouge-score
 numpy
 datasets
+torch

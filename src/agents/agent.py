@@ -34,11 +34,15 @@ class Agent(BaseAgent):
     def is_continue(self, state, **kwargs):
         return self.is_execute
     
-    def extract_json(self, text: str) -> str:
+    def extract_vote(self, text: str) -> str:
         match = re.search(r"\{(?:[^{}]|(?:\{[^{}]*\}))*\}", text)
         if not match:
             return None
-        return json.loads(match.group(0))
+        try:
+            json_result= json.loads(match.group(0))
+        except json.JSONDecodeError:
+            json_result = None
+        return json_result
     
     def _execute(self, state: GraphState, **kwargs) -> GraphState:
         model_dict = {
@@ -91,7 +95,7 @@ class Agent(BaseAgent):
                 "other_responses": model_dict[self.name]["other_responses"],
             })
 
-            self.vote = self.extract_json(self.vote)
+            self.vote = self.extract_vote(self.vote)
 
             model_dict[self.name]["vote"] = self.vote
 
