@@ -16,8 +16,9 @@ module load cuda/12.1
 module load ollama-gpu
 
 # Define virtual environment and requirements
-VENV_PATH=~/mas-llm/.venv
-REQ_FILE=~/mas-llm/requirements.txt
+WORK_DIR=/work/vinod/markphan03
+VENV_PATH=$WORK_DIR/mas-llm/.venv
+REQ_FILE=$WORK_DIR/mas-llm/requirements.txt
 
 # Create the virtual environment if it doesn't exist
 if [ ! -d "$VENV_PATH" ]; then
@@ -27,8 +28,8 @@ fi
 
 # Activate the virtual environment
 source $VENV_PATH/bin/activate
-
 # Upgrade pip and install dependencies
+
 echo "Installing dependencies from $REQ_FILE..."
 python -m pip install --upgrade pip
 python -m pip install -r $REQ_FILE
@@ -36,7 +37,7 @@ python -m pip install -r $REQ_FILE
 mkdir -p logs
 
 echo "Starting Evaluating..."
-python ~/mas-llm/src/evaluation/eval_truthfulqa_parallel.py
+python $WORK_DIR/mas-llm/src/evaluation/eval_truthfulqa.py
 
 deactivate
 echo "✅ Training finished!"

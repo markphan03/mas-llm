@@ -1,3 +1,4 @@
+import re
 import random
 import numpy as np
 import json
@@ -25,14 +26,8 @@ np.random.seed(SEED)
 agents = [
     Agent(ChatOllama(model="llama3.1"), rank=1),
     Agent(ChatOllama(model="gemma3:12b"), rank=2),
-    Agent(ChatOllama(model="deepseek-r1"), rank=3),
+    # Agent(ChatOllama(model="deepseek-r1"), rank=3),
 ]
-
-# agents = [
-#     Agent(ChatOllama(model="llama3.1"), rank=1),
-#     Agent(ChatOllama(model="llama3.1"), rank=2),
-#     Agent(ChatOllama(model="llama3.1"), rank=3),
-# ]
 
 vote_manager = Vote(agents=agents, method="approval")
 
@@ -40,14 +35,20 @@ vote_manager = Vote(agents=agents, method="approval")
 # ===========================
 #  INITIAL GRAPH STATE
 # ===========================
+# state: GraphState = {
+#     "question": "What is the capital of France?",
+#     "context": (
+#         "Paris first became the capital of France in 508 AD under King Clovis I. "
+#         "It lost this status for a time but regained it under Hugh Capet in 987, "
+#         "with its position as the permanent capital becoming firmly established "
+#         "under the Capetian dynasty."
+#     ),
+#     "winners": [f"agent_{i}" for i in range(1, len(agents) + 1)]
+# }
+
 state: GraphState = {
-    "question": "What is the capital of France?",
-    "context": (
-        "Paris first became the capital of France in 508 AD under King Clovis I. "
-        "It lost this status for a time but regained it under Hugh Capet in 987, "
-        "with its position as the permanent capital becoming firmly established "
-        "under the Capetian dynasty."
-    ),
+    "question": "Why do matadors wave red capes?",
+    "context":  "",
     "winners": [f"agent_{i}" for i in range(1, len(agents) + 1)]
 }
 
@@ -88,9 +89,15 @@ def generate_final_answer(voting_state: Dict[str, Any], agents: list[Agent], md_
 
     # 3. Prepare summarization prompt
     other_responses = chosen_agent_record.get("other_responses", {})
-    formatted_responses = "\n\n".join(
-        f"{agent_name}: {text}" for agent_name, text in other_responses.items()
-    )
+    votes = chosen_agent_record.get("vote", {})
+    formatted_responses = "\n\n"
+    for agent_name, text in other_responses.items():
+        approve = votes.get(agent_name, "")
+        # print(approve)   # keep your debug print
+        if approve != "approve":
+            continue
+        formatted_responses += f"{agent_name}: {text}\n"
+    # print(formatted_responses)
 
     final_prompt = f"""
         You are the final evaluator.
@@ -102,7 +109,7 @@ def generate_final_answer(voting_state: Dict[str, Any], agents: list[Agent], md_
         Other model responses:
         {formatted_responses}
 
-        Produce the best single final answer.
+        Produce the best single final answer. Keep it concise and accurate in one or two sentences.
         """.strip()
 
     # 4. Execute final LLM
@@ -111,6 +118,8 @@ def generate_final_answer(voting_state: Dict[str, Any], agents: list[Agent], md_
     result_text = (
         result.content if hasattr(result, "content") else str(result)
     )
+    # For - reasoning model - Remove <think>...</think> and return only actual response
+    result_text = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL)
 
     md_buffer.write("\n## Final Consolidated Answer\n")
     md_buffer.write("```\n" + result_text.strip() + "\n```\n")

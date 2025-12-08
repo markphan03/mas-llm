@@ -5,9 +5,6 @@ from graphstate import GraphState
 from agents.vote import Vote
 
 
-
-
-
 def create_graph(agents: list[Agent], vote_manager: Vote):
 
     workflow = StateGraph(GraphState)

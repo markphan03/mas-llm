@@ -61,5 +61,17 @@ SYSTEM_PROMPTS = {
         "agent_3": "approve"
         }}
         No extra text outside the JSON object.
+    """,
+    "summarization": """
+            You are the final evaluator.
+            Question: {question}
+
+            Context: {context}
+
+            Other model responses:
+            {formatted_responses}
+
+            Produce the best single final answer. Keep it concise and accurate.
+      
     """
 }

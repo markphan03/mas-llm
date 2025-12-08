@@ -1,3 +1,4 @@
+import re
 import json
 import random
 import numpy as np
@@ -34,55 +35,6 @@ agents = [
 vote_manager = Vote(agents=agents, method="approval")
 
 
-# ===========================
-#  FINAL ANSWER GENERATION
-# ===========================
-def generate_final_answer(voting_state: Dict[str, Any], agents: list[Agent]):
-    """Pick the winning agent to generate final answer from other responses"""
-    question = voting_state.get("question", "")
-    context = voting_state.get("context", "")
-    responses = voting_state.get("responses", {})
-    vote_counts = voting_state.get("agent_scores", {})
-
-    # 1. Determine Winning Agent
-    max_votes = max(vote_counts.values())
-    winners = [agent for agent, score in vote_counts.items() if score == max_votes]
-    chosen_agent_name = random.choice(winners)
-
-    # 2. Get the corresponding agent object
-    agent_lookup = {f"agent_{a.rank}": a for a in agents}
-    chosen_agent = agent_lookup[chosen_agent_name]
-    chosen_agent_record = responses[chosen_agent_name]
-
-    # 3. Prepare summarization prompt
-    other_responses = chosen_agent_record.get("other_responses", {})
-    formatted_responses = "\n\n".join(
-        f"{agent_name}: {text}" for agent_name, text in other_responses.items()
-    )
-
-    final_prompt = f"""
-        You are the final evaluator.
-        Question: {question}
-
-        Context:
-        {context}
-
-        Other model responses:
-        {formatted_responses}
-
-        Produce the best single final answer.
-        """.strip()
-
-    # 4. Execute final LLM
-    llm = chosen_agent.base_model
-    result = llm.invoke(final_prompt)
-    result_text = (
-        result.content if hasattr(result, "content") else str(result)
-    )
-
-    return result_text
-
-
 # =======================================
 #  LOAD TRUTHFULQA DATASET
 #  (Adapt to your file location)
@@ -101,19 +53,27 @@ print(f"Loaded {len(train_samples)} samples from TruthfulQA")
 # =======================================
 gold_texts = []
 pred_texts = []
-exact_matches = []
-bleu_scores = []
-rouge_scores = []
+
+bleu1_scores = []
+bleu4_scores = []
+rouge1_scores = []
+rougeL_scores = []
 
 
 # ROUGE scorer setup
-rouge = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
+rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
 
 
 # =======================================
 #  MAIN EVALUATION LOOP
 # =======================================
 for i, sample in enumerate(train_samples):
+    if i == 50:
+        break
+    # RESET AGENTS FOR NEW QUESTION
+    for agent in agents:
+        agent.reset()
+
     question = sample.get("Question", "").strip()
     gold_answer = sample.get("Best Answer", "").strip()
 
@@ -127,29 +87,40 @@ for i, sample in enumerate(train_samples):
     # ========== Run Multi-Agent Pipeline ==========
     graph = create_graph(agents, vote_manager)
     voting_state = graph.invoke(state)
-
-    final_answer = generate_final_answer(voting_state, agents)
+    final_answer = vote_manager.generate_final_answer(voting_state, agents)
 
     # ========== Store Predictions ==========
     gold_texts.append(gold_answer)
     pred_texts.append(final_answer)
 
-    # Exact match
-    exact_matches.append(1 if final_answer.lower() == gold_answer.lower() else 0)
-
-    # BLEU
+    # BLEU-1
     smoothie = SmoothingFunction().method2
-    bleu = sentence_bleu(
+    bleu1 = sentence_bleu(
         [gold_answer.split()],
         final_answer.split(),
         smoothing_function=smoothie,
+        weights=(1, 0, 0, 0)
     )
-    bleu_scores.append(bleu)
+    bleu1_scores.append(bleu1)
 
-    # ROUGE-L
-    r = rouge.score(gold_answer, final_answer)["rougeL"].fmeasure
-    rouge_scores.append(r)
+    # BLEU-4
+    bleu4 = sentence_bleu(
+        [gold_answer.split()],
+        final_answer.split(),
+        smoothing_function=smoothie,
+        weights=(0.25, 0.25, 0.25, 0.25)
+    )
+    bleu4_scores.append(bleu4)
 
+    # ROUGE-1 and ROUGE-L
+    scores = rouge.score(gold_answer, final_answer)
+    rouge1_score = scores['rouge1'].fmeasure
+    rougeL_score = scores['rougeL'].fmeasure
+
+    rougeL_scores.append(rougeL_score)
+    rouge1_scores.append(rouge1_score)
+
+    print(f"Sample {i+1}: BLEU1={bleu1:.4f} BLUE4={bleu4:.4f} ROUGE1={rouge1_score:.4f} ROUGEL={rougeL_score:.4f}")
     if (i + 1) % 25 == 0:
         print(f"Processed {i + 1}/{len(train_samples)}")
 
@@ -157,15 +128,17 @@ for i, sample in enumerate(train_samples):
 # =======================================
 #  METRIC RESULTS
 # =======================================
-accuracy = sum(exact_matches) / len(exact_matches)
-avg_bleu = sum(bleu_scores) / len(bleu_scores)
-avg_rouge = sum(rouge_scores) / len(rouge_scores)
+# Compute averages
+avg_bleu1 = sum(bleu1_scores) / len(bleu1_scores)
+avg_bleu4 = sum(bleu4_scores) / len(bleu4_scores)
+avg_rouge1 = sum(rouge1_scores) / len(rouge1_scores)
+avg_rougeL = sum(rougeL_scores) / len(rougeL_scores)
 
 print("\n=========== TruthfulQA Results ===========")
-print(f"Exact Match Accuracy: {accuracy:.4f}")
-print(f"Avg BLEU Score:       {avg_bleu:.4f}")
-print(f"Avg ROUGE-L Score:    {avg_rouge:.4f}")
-
+print(f"Average BLEU-1 Score:   {avg_bleu1:.4f}")
+print(f"Average BLEU-4 Score:   {avg_bleu4:.4f}")
+print(f"Average ROUGE-1 Score:  {avg_rouge1:.4f}")
+print(f"Average ROUGE-L Score:  {avg_rougeL:.4f}")
 
 # =======================================
 #  WRITE DETAILED MARKDOWN REPORT
@@ -173,9 +146,10 @@ print(f"Avg ROUGE-L Score:    {avg_rouge:.4f}")
 md = StringIO()
 md.write("# TruthfulQA Multi-Agent Evaluation\n\n")
 md.write("## Overall Metrics\n")
-md.write(f"- Exact Match Accuracy: **{accuracy:.4f}**\n")
-md.write(f"- Average BLEU Score: **{avg_bleu:.4f}**\n")
-md.write(f"- Average ROUGE-L Score: **{avg_rouge:.4f}**\n\n")
+md.write(f"- Average BLEU-1 Score: **{avg_bleu1:.4f}**\n")
+md.write(f"- Average BLEU-4 Score: **{avg_bleu4:.4f}**\n")
+md.write(f"- Average ROUGE-1 Score: **{avg_rouge1:.4f}**\n")
+md.write(f"- Average ROUGE-L Score: **{avg_rougeL:.4f}**\n\n")
 
 md.write("## Per-Sample Results\n")
 for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
@@ -189,3 +163,4 @@ with open("../docs/truthfulqa_results.md", "w", encoding="utf-8") as f:
     f.write(md.getvalue())
 
 print("\nMarkdown report saved to truthfulqa_results.md")
+

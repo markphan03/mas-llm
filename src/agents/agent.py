@@ -1,3 +1,4 @@
+# agent.py
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models import BaseChatModel
@@ -9,99 +10,119 @@ from agents.AGENT_PROMPTS import SYSTEM_PROMPTS
 import re
 import json
 
-NUMBER_OF_AGENTS = 3
+# Import total number of agents from main file
+NUMBER_OF_AGENTS = 2
+
 
 class Agent(BaseAgent):
     def __init__(self, base_model: BaseChatModel, rank: int):
-        """
-        base_model - base model 
-        """
         self.base_model = base_model
         self.rank = rank
         self.name = self.get_name()
-        self.response = ""
+
+        self.response = None
         self.other_responses = {}
         self.vote = {}
-        self.is_execute = True  # True when agent is on - False when agent is off(executing job)
-        prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["genai"])
-        self.genai = prompt | base_model | StrOutputParser()
+        self.is_execute = True
+
+        # generation model
+        gen_prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["genai"])
+        self.genai = gen_prompt | base_model | StrOutputParser()
+
+        # voting model
         voting_prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["voting"])
         self.voting_ai = voting_prompt | base_model | StrOutputParser()
 
+    def reset(self):
+        self.response = None
+        self.other_responses = {}
+        self.vote = {}
+        self.is_execute = True
+
     def get_name(self) -> str:
         return f"agent_{self.rank}"
-    
+
     def is_continue(self, state, **kwargs):
+        """Return True → keep looping; False → stop."""
         return self.is_execute
-    
-    def extract_vote(self, text: str) -> str:
+
+    # ----------------------------------------------
+    # Extract JSON { ... } from LLM output
+    # ----------------------------------------------
+    def extract_vote(self, text: str):
         match = re.search(r"\{(?:[^{}]|(?:\{[^{}]*\}))*\}", text)
         if not match:
             return None
         try:
-            json_result= json.loads(match.group(0))
+            return json.loads(match.group(0))
         except json.JSONDecodeError:
-            json_result = None
-        return json_result
-    
+            return None
+
+    # ----------------------------------------------
+    # Main execution
+    # ----------------------------------------------
     def _execute(self, state: GraphState, **kwargs) -> GraphState:
-        model_dict = {
-                self.name: 
-                    {
-                        "model_name": self.base_model.model_dump().get("model"),
-                        "response": self.response,
-                        "other_responses": self.other_responses,
-                        "vote": self.vote,
-                    }
 
-            }
-      
-        # Get the current response entry (or None if missing)
+        # Pull existing state for this agent
         agent_state = state["responses"].get(self.name, {})
-        existing_response = (
-            agent_state
-            .get("response")
-        )
 
-        # Step 1: Generate its own response
-        if existing_response is None:
+        # ==========================================================
+        # STEP 1 — Generate self response (only ONCE)
+        # ==========================================================
+        if agent_state.get("response") is None:
             self.response = self.genai.invoke({
                 "question": state["question"],
                 "context": state["context"]
             })
-            
-            model_dict[self.name]["response"] = self.response
 
-        # Step 2: Gather other agents' responses
-        for i in range(1, NUMBER_OF_AGENTS+1):
-            current_agent = f"agent_{i}"
-            if current_agent != self.name:
-                current_agent_response = (
-                    state["responses"]
-                    .get(current_agent, {})
-                    .get("response")
-                )
-                if current_agent_response is not None:
-                    self.other_responses[current_agent] = current_agent_response
+        # ==========================================================
+        # STEP 2 — Collect other agent responses
+        # ==========================================================
+        self.other_responses = {}
+        for i in range(1, NUMBER_OF_AGENTS + 1):
+            name = f"agent_{i}"
+            if name == self.name:
+                continue  # skip self
 
-        # Step 3: Vote other agents' responses
-        if len(self.other_responses) == NUMBER_OF_AGENTS-1:
-            model_dict[self.name]["other_responses"] = self.other_responses
+            resp = state["responses"].get(name, {}).get("response")
+            if resp is not None:
+                self.other_responses[name] = resp
 
-            # voting 
-            self.vote = self.voting_ai.invoke({
-                "question": state["question"],
-                "context": state["context"],
-                "other_responses": model_dict[self.name]["other_responses"],
-            })
+        # ==========================================================
+        # STEP 3 — Voting Logic
+        #    Only happens when NUMBER_OF_AGENTS > 1
+        # ==========================================================
+        if NUMBER_OF_AGENTS > 1:
 
-            self.vote = self.extract_vote(self.vote)
+            # Only vote when all other agents responded
+            if len(self.other_responses) == NUMBER_OF_AGENTS - 1:
 
-            model_dict[self.name]["vote"] = self.vote
+                vote_raw = self.voting_ai.invoke({
+                    "question": state["question"],
+                    "context": state["context"],
+                    "other_responses": self.other_responses
+                })
 
-            self.is_execute = False
+                self.vote = self.extract_vote(vote_raw)
+                self.is_execute = False
 
-        return {"responses": model_dict}
+        else:
+            # ======================================================
+            # SPECIAL CASE: Only 1 agent → No votes needed
+            # ======================================================
+            self.vote = {}
+            self.is_execute = False   # stop immediately
 
-      
-
+        # ==========================================================
+        # Return updated state
+        # ==========================================================
+        return {
+            "responses": {
+                self.name: {
+                    "model_name": self.base_model.model_dump().get("model"),
+                    "response": self.response,
+                    "other_responses": self.other_responses,
+                    "vote": self.vote
+                }
+            }
+        }
