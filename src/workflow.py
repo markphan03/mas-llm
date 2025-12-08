@@ -1,8 +1,8 @@
 from langgraph.graph import StateGraph, START, END
-from agents.agent import Agent
 
-from graphstate import GraphState
-from agents.vote import Vote
+from src.agents.agent import Agent
+from src.graphstate import GraphState
+from src.agents.vote import Vote
 
 
 def create_graph(agents: list[Agent], vote_manager: Vote):

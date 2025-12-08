@@ -5,12 +5,10 @@ from typing import Literal, List
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-from graphstate import GraphState
-from agents.agent import Agent
-from agents.AGENT_PROMPTS import SYSTEM_PROMPTS
+from src.graphstate import GraphState
+from src.agents.agent import Agent
+from src.agents.AGENT_PROMPTS import SYSTEM_PROMPTS
 
-# Import global agent count
-NUMBER_OF_AGENTS = 2
 
 
 class Vote:
@@ -21,6 +19,7 @@ class Vote:
     ):
         self.name = self.get_name()
         self.agents = agents
+        self.num_agents = len(agents)
         self.method = method
         self.voting_continue = True
 
@@ -29,7 +28,7 @@ class Vote:
 
     def is_continue(self, state: GraphState):
         """Vote loop only runs when more than 1 agent exists"""
-        if NUMBER_OF_AGENTS <= 1:
+        if self.num_agents <= 1:
             return False
         return self.voting_continue
 
@@ -41,7 +40,7 @@ class Vote:
         # ============================================================
         # SPECIAL CASE — only 1 agent → skip all voting logic
         # ============================================================
-        if NUMBER_OF_AGENTS <= 1:
+        if self.num_agents <= 1:
             self.voting_continue = False
 
             # create trivial score for the only agent
@@ -117,7 +116,7 @@ class Vote:
         # ============================================================
         # SPECIAL CASE — Only one agent in the system
         # ============================================================
-        if NUMBER_OF_AGENTS <= 1:
+        if self.num_agents <= 1:
             only_agent = agents[0]
             raw_answer = only_agent.response or responses[only_agent.name]["response"]
             return re.sub(r"<think>.*?</think>", "", raw_answer, flags=re.DOTALL)

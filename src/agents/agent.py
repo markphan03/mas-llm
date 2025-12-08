@@ -3,23 +3,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models import BaseChatModel
 
-from agents.base_agent import BaseAgent
-from graphstate import GraphState
-from agents.AGENT_PROMPTS import SYSTEM_PROMPTS
+from src.agents.base_agent import BaseAgent
+from src.graphstate import GraphState
+from src.agents.AGENT_PROMPTS import SYSTEM_PROMPTS
 
 import re
 import json
 
-# Import total number of agents from main file
-NUMBER_OF_AGENTS = 2
-
 
 class Agent(BaseAgent):
-    def __init__(self, base_model: BaseChatModel, rank: int):
+    def __init__(self, base_model: BaseChatModel, num_agents: int, rank: int):
         self.base_model = base_model
         self.rank = rank
         self.name = self.get_name()
-
+        self.num_agents = num_agents
         self.response = None
         self.other_responses = {}
         self.vote = {}
@@ -79,7 +76,7 @@ class Agent(BaseAgent):
         # STEP 2 — Collect other agent responses
         # ==========================================================
         self.other_responses = {}
-        for i in range(1, NUMBER_OF_AGENTS + 1):
+        for i in range(1, self.num_agents + 1):
             name = f"agent_{i}"
             if name == self.name:
                 continue  # skip self
@@ -92,10 +89,10 @@ class Agent(BaseAgent):
         # STEP 3 — Voting Logic
         #    Only happens when NUMBER_OF_AGENTS > 1
         # ==========================================================
-        if NUMBER_OF_AGENTS > 1:
+        if self.num_agents > 1:
 
             # Only vote when all other agents responded
-            if len(self.other_responses) == NUMBER_OF_AGENTS - 1:
+            if len(self.other_responses) == self.num_agents - 1:
 
                 vote_raw = self.voting_ai.invoke({
                     "question": state["question"],

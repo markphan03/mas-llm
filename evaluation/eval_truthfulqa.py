@@ -2,6 +2,8 @@ import re
 import json
 import random
 import numpy as np
+
+from pathlib import Path
 from typing import Dict, Any, List
 from io import StringIO
 from sklearn.metrics import accuracy_score
@@ -9,10 +11,10 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 
 from langchain_ollama import ChatOllama
-from graphstate import GraphState
-from workflow import create_graph
-from agents.agent import Agent
-from agents.vote import Vote
+from src.graphstate import GraphState
+from src.workflow import create_graph
+from src.agents.agent import Agent
+from src.agents.vote import Vote
 
 
 # =======================================
@@ -26,10 +28,11 @@ np.random.seed(SEED)
 # =======================================
 #  SETUP AGENTS
 # =======================================
+NUMBER_OF_AGENTS = 3
 agents = [
-    Agent(ChatOllama(model="llama3.1"), rank=1),
-    Agent(ChatOllama(model="gemma3:12b"), rank=2),
-    Agent(ChatOllama(model="deepseek-r1"), rank=3),
+    Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
+    Agent(ChatOllama(model="gemma3:12b"), num_agents=NUMBER_OF_AGENTS, rank=2),
+    Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=3),
 ]
 
 vote_manager = Vote(agents=agents, method="approval")
@@ -68,7 +71,7 @@ rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
 #  MAIN EVALUATION LOOP
 # =======================================
 for i, sample in enumerate(train_samples):
-    if i == 50:
+    if i == 2:
         break
     # RESET AGENTS FOR NEW QUESTION
     for agent in agents:
@@ -159,7 +162,10 @@ for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
     md.write(f"**Model Final Answer:**\n```\n{pred}\n```\n\n")
     md.write("---\n")
 
-with open("../docs/truthfulqa_results.md", "w", encoding="utf-8") as f:
+project_root = Path(__file__).parent.parent
+doc_file = project_root / "docs" / "truthfulqa_results.md"
+
+with open(doc_file, "w", encoding="utf-8") as f:
     f.write(md.getvalue())
 
 print("\nMarkdown report saved to truthfulqa_results.md")

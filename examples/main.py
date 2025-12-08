@@ -6,10 +6,10 @@ from typing import Dict, Any
 from io import StringIO
 
 from langchain_ollama import ChatOllama
-from graphstate import GraphState
-from workflow import create_graph
-from agents.agent import Agent
-from agents.vote import Vote
+
+from src.graphstate import GraphState
+from src.workflow import create_graph
+from src.agents import Agent, Vote
 
 
 # ===========================
@@ -23,10 +23,11 @@ np.random.seed(SEED)
 # ===========================
 #  AGENT SETUP
 # ===========================
+NUMBER_OF_AGENTS = 3
 agents = [
-    Agent(ChatOllama(model="llama3.1"), rank=1),
-    Agent(ChatOllama(model="gemma3:12b"), rank=2),
-    # Agent(ChatOllama(model="deepseek-r1"), rank=3),
+    Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
+    Agent(ChatOllama(model="gemma3:12b"), num_agents=NUMBER_OF_AGENTS, rank=2),
+    Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=3),
 ]
 
 vote_manager = Vote(agents=agents, method="approval")
@@ -130,7 +131,7 @@ def generate_final_answer(voting_state: Dict[str, Any], agents: list[Agent], md_
 # ===========================
 #  WRITE TO MARKDOWN FILE
 # ===========================
-def write_output_to_markdown(final_state, final_result, filename="final_output.md"):
+def write_output_to_markdown(final_state, final_result, filename="example_output.md"):
     md_buffer = StringIO()
 
     md_buffer.write("# Multi-Agent Voting Result\n\n")
@@ -143,8 +144,17 @@ def write_output_to_markdown(final_state, final_result, filename="final_output.m
     # Generate final result and capture logs into same buffer
     generate_final_answer(final_state, agents, md_buffer)
 
-    # Save to file
-    with open(filename, "w", encoding="utf-8") as f:
+    from pathlib import Path
+
+    # Get the path to the project root (one level up from examples/)
+    project_root = Path(__file__).parent.parent
+
+    # Path to the docs folder
+    docs_file = project_root / "docs" / filename
+    print(project_root)
+    # Open the file
+    with open(docs_file, "w", encoding="utf-8") as f:
+
         f.write(md_buffer.getvalue())
 
 
