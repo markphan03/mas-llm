@@ -9,6 +9,7 @@ from io import StringIO
 from sklearn.metrics import accuracy_score
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
+from comet import download_model, load_from_checkpoint
 
 from langchain_ollama import ChatOllama
 from src.graphstate import GraphState
@@ -28,11 +29,11 @@ np.random.seed(SEED)
 # =======================================
 #  SETUP AGENTS
 # =======================================
-NUMBER_OF_AGENTS = 3
+NUMBER_OF_AGENTS = 1
 agents = [
-    Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
-    Agent(ChatOllama(model="gemma3:12b"), num_agents=NUMBER_OF_AGENTS, rank=2),
-    Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=3),
+    # Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
+    Agent(ChatOllama(model="gemma3:12b"), num_agents=NUMBER_OF_AGENTS, rank=1),
+    # Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=1),
 ]
 
 vote_manager = Vote(agents=agents, method="approval")
@@ -62,6 +63,7 @@ bleu4_scores = []
 rouge1_scores = []
 rougeL_scores = []
 
+scores_logs = []
 
 # ROUGE scorer setup
 rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
@@ -71,8 +73,6 @@ rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
 #  MAIN EVALUATION LOOP
 # =======================================
 for i, sample in enumerate(train_samples):
-    if i == 2:
-        break
     # RESET AGENTS FOR NEW QUESTION
     for agent in agents:
         agent.reset()
@@ -123,10 +123,45 @@ for i, sample in enumerate(train_samples):
     rougeL_scores.append(rougeL_score)
     rouge1_scores.append(rouge1_score)
 
-    print(f"Sample {i+1}: BLEU1={bleu1:.4f} BLUE4={bleu4:.4f} ROUGE1={rouge1_score:.4f} ROUGEL={rougeL_score:.4f}")
+    scores_log = f"Sample {i+1}: BLEU1={bleu1:.4f} BLUE4={bleu4:.4f} ROUGE1={rouge1_score:.4f} ROUGEL={rougeL_score:.4f}"
+    scores_logs.append(scores_log)
+    print(scores_log)
+
     if (i + 1) % 25 == 0:
         print(f"Processed {i + 1}/{len(train_samples)}")
 
+
+# Load COMET model once (recommended: "Unbabel/wmt22-comet-da")
+MODEL_PATH = download_model("Unbabel/wmt22-comet-da")
+model = load_from_checkpoint(MODEL_PATH)
+
+
+def cal_comet_score(hypotheses, references, sources=None):
+    """
+    Compute COMET scores.
+
+    hypotheses: list[str]
+    references: list[str]
+    sources:    list[str] or None (many COMET models require sources)
+    
+    Returns: list of COMET scores (floats)
+    """
+
+    # Prepare batch
+    data = []
+    for h, r in zip(hypotheses, references):
+        data.append({
+            "src": "" if sources is None else sources,  # source can be empty string
+            "mt": h,
+            "ref": r,
+        })
+
+    # Compute scores
+    model_output = model.predict(data, batch_size=16, gpus=1)
+    return model_output.system_score
+
+
+comet_score = cal_comet_score(gold_texts, pred_texts)
 
 # =======================================
 #  METRIC RESULTS
@@ -142,6 +177,32 @@ print(f"Average BLEU-1 Score:   {avg_bleu1:.4f}")
 print(f"Average BLEU-4 Score:   {avg_bleu4:.4f}")
 print(f"Average ROUGE-1 Score:  {avg_rouge1:.4f}")
 print(f"Average ROUGE-L Score:  {avg_rougeL:.4f}")
+print(f"Average COMET Score: {comet_score:.4f}")
+
+# =======================================
+#  SAVE PER-SAMPLE RESULTS TO JSON
+# =======================================
+import json
+
+results_json = []
+
+for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
+    entry = {
+        "id": i + 1,
+        "question": train_samples[i]["Question"],
+        "gold_answer": gold,
+        "pred_answer": pred,
+    }
+    results_json.append(entry)
+
+project_root = Path(__file__).parent.parent
+json_output_path = project_root / "docs" / "truthfulqa_results.json"
+
+with open(json_output_path, "w", encoding="utf-8") as jf:
+    json.dump(results_json, jf, indent=4, ensure_ascii=False)
+
+print(f"JSON results saved to {json_output_path}")
+
 
 # =======================================
 #  WRITE DETAILED MARKDOWN REPORT
@@ -153,16 +214,16 @@ md.write(f"- Average BLEU-1 Score: **{avg_bleu1:.4f}**\n")
 md.write(f"- Average BLEU-4 Score: **{avg_bleu4:.4f}**\n")
 md.write(f"- Average ROUGE-1 Score: **{avg_rouge1:.4f}**\n")
 md.write(f"- Average ROUGE-L Score: **{avg_rougeL:.4f}**\n\n")
+md.write(f"- Average COMET Score: **{comet_score:.4f}**\n\n")
 
 md.write("## Per-Sample Results\n")
 for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
-    md.write(f"### Sample {i+1}\n")
+    md.write(f"### Sample {i+1}\n {scores_logs[i]}\n\n")
     md.write(f"**Question:** {train_samples[i]['Question']}\n\n")
     md.write(f"**Gold Answer:**\n```\n{gold}\n```\n")
     md.write(f"**Model Final Answer:**\n```\n{pred}\n```\n\n")
     md.write("---\n")
 
-project_root = Path(__file__).parent.parent
 doc_file = project_root / "docs" / "truthfulqa_results.md"
 
 with open(doc_file, "w", encoding="utf-8") as f:
