@@ -9,6 +9,7 @@
 #SBATCH --mem=32GB
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
+
 module purge
 module load python/3.10
 module load cuda/12.1

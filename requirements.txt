@@ -9,3 +9,5 @@ rouge-score
 numpy
 datasets
 torch
+openai
+ragas
