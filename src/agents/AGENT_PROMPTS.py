@@ -74,6 +74,8 @@ SYSTEM_PROMPTS = {
 
         Context: {context}
 
+        Your response: {response}
+        
         Other model responses:
         {formatted_responses}
 

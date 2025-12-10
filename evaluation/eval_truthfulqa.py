@@ -35,9 +35,9 @@ np.random.seed(SEED)
 # =======================================
 NUMBER_OF_AGENTS = 1
 agents = [
-    Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
-    Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=2),
-    Agent(ChatOllama(model="mistral"), num_agents=NUMBER_OF_AGENTS, rank=3),
+    Agent(ChatOllama(model="llama3.1", seed=SEED), num_agents=NUMBER_OF_AGENTS, rank=1),
+    Agent(ChatOllama(model="deepseek-r1", seed=SEED), num_agents=NUMBER_OF_AGENTS, rank=2),
+    Agent(ChatOllama(model="mistral", seed=SEED), num_agents=NUMBER_OF_AGENTS, rank=3),
 ]
 
 vote_manager = Vote(agents=agents, method="approval")

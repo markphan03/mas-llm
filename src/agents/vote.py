@@ -132,6 +132,7 @@ class Vote:
         chosen_agent = agent_lookup[chosen_agent_name]
         chosen_agent_record = responses[chosen_agent_name]
 
+        response = chosen_agent_record.get("response", "")
         other_responses = chosen_agent_record.get("other_responses", {})
         votes = chosen_agent_record.get("vote", {}) or {}
 
@@ -148,6 +149,7 @@ class Vote:
         raw_result = llm.invoke({
             "question": question,
             "context": context,
+            "response": response,
             "formatted_responses": formatted_responses
         })
 
