@@ -69,15 +69,23 @@ SYSTEM_PROMPTS = {
         No extra text outside the JSON object.
     """,
     "summarization": """
-            You are the final evaluator.
-            Question: {question}
+        You are the final evaluator.
+        Question: {question}
 
-            Context: {context}
+        Context: {context}
 
-            Other model responses:
-            {formatted_responses}
+        Other model responses:
+        {formatted_responses}
 
-            Produce the best single final answer. Keep it concise and accurate.
+        Produce the best single final answer. Keep it concise and accurate.
       
+    """,
+    "truthful_prompt":  """
+        You are a grader assessing whether an LLM generation is grounded in / supported by a set of retrieved facts. \n
+        Give a binary score 'True' or 'False'. 'True' means that the answer is grounded in / supported by the set of facts.
+        Provide your response in JSON format with the following structure without any explanations:
+        {{
+            "binary_score": true OR false
+        }}
     """
 }

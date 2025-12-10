@@ -3,6 +3,7 @@ import json
 import random
 import numpy as np
 
+from dotenv import load_dotenv
 from pathlib import Path
 from typing import Dict, Any, List
 from io import StringIO
@@ -11,16 +12,19 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 from comet import download_model, load_from_checkpoint
 
+from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from src.graphstate import GraphState
 from src.workflow import create_graph
 from src.agents.agent import Agent
 from src.agents.vote import Vote
-
+from src import TruthfulGrader
 
 # =======================================
 #  RANDOM SEED
 # =======================================
+load_dotenv()
+
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -31,9 +35,9 @@ np.random.seed(SEED)
 # =======================================
 NUMBER_OF_AGENTS = 1
 agents = [
-    # Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
-    Agent(ChatOllama(model="gemma3:12b"), num_agents=NUMBER_OF_AGENTS, rank=1),
-    # Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=1),
+    Agent(ChatOllama(model="llama3.1"), num_agents=NUMBER_OF_AGENTS, rank=1),
+    Agent(ChatOllama(model="deepseek-r1"), num_agents=NUMBER_OF_AGENTS, rank=2),
+    Agent(ChatOllama(model="mistral"), num_agents=NUMBER_OF_AGENTS, rank=3),
 ]
 
 vote_manager = Vote(agents=agents, method="approval")
@@ -62,6 +66,7 @@ bleu1_scores = []
 bleu4_scores = []
 rouge1_scores = []
 rougeL_scores = []
+truthful_scores = []
 
 scores_logs = []
 
@@ -69,6 +74,9 @@ scores_logs = []
 rouge = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
 
 
+# Truthful Grader 
+llm = "gpt-4o-mini"
+truthful_scorer = TruthfulGrader(base_model=ChatOpenAI(model=llm))
 # =======================================
 #  MAIN EVALUATION LOOP
 # =======================================
@@ -123,9 +131,15 @@ for i, sample in enumerate(train_samples):
     rougeL_scores.append(rougeL_score)
     rouge1_scores.append(rouge1_score)
 
-    scores_log = f"Sample {i+1}: BLEU1={bleu1:.4f} BLUE4={bleu4:.4f} ROUGE1={rouge1_score:.4f} ROUGEL={rougeL_score:.4f}"
+    # Truthful Accuracy
+    truthful_score = truthful_scorer.calculate_truthful_accuracy_2(question, gold_answer, final_answer)
+    truthful_scores.append(truthful_score)
+
+    scores_log = f"Sample {i+1}: BLEU1={bleu1:.4f} BLUE4={bleu4:.4f} ROUGE1={rouge1_score:.4f} ROUGEL={rougeL_score:.4f} Truthful_Score={True if truthful_score else False}"
     scores_logs.append(scores_log)
     print(scores_log)
+
+    
 
     if (i + 1) % 25 == 0:
         print(f"Processed {i + 1}/{len(train_samples)}")
@@ -171,6 +185,7 @@ avg_bleu1 = sum(bleu1_scores) / len(bleu1_scores)
 avg_bleu4 = sum(bleu4_scores) / len(bleu4_scores)
 avg_rouge1 = sum(rouge1_scores) / len(rouge1_scores)
 avg_rougeL = sum(rougeL_scores) / len(rougeL_scores)
+avg_truthful = sum(truthful_scores) / len(truthful_scores)
 
 print("\n=========== TruthfulQA Results ===========")
 print(f"Average BLEU-1 Score:   {avg_bleu1:.4f}")
@@ -178,6 +193,7 @@ print(f"Average BLEU-4 Score:   {avg_bleu4:.4f}")
 print(f"Average ROUGE-1 Score:  {avg_rouge1:.4f}")
 print(f"Average ROUGE-L Score:  {avg_rougeL:.4f}")
 print(f"Average COMET Score: {comet_score:.4f}")
+print(f"Average Truthful Score: {avg_truthful:.4f}")
 
 # =======================================
 #  SAVE PER-SAMPLE RESULTS TO JSON
@@ -192,6 +208,7 @@ for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
         "question": train_samples[i]["Question"],
         "gold_answer": gold,
         "pred_answer": pred,
+        "is_truthful": True if truthful_scores[i] else False,
     }
     results_json.append(entry)
 
@@ -215,6 +232,7 @@ md.write(f"- Average BLEU-4 Score: **{avg_bleu4:.4f}**\n")
 md.write(f"- Average ROUGE-1 Score: **{avg_rouge1:.4f}**\n")
 md.write(f"- Average ROUGE-L Score: **{avg_rougeL:.4f}**\n\n")
 md.write(f"- Average COMET Score: **{comet_score:.4f}**\n\n")
+md.write(f"- Average Truthful Score: **{avg_truthful:.4f}**\n\n")
 
 md.write("## Per-Sample Results\n")
 for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):

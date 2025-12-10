@@ -1,5 +1,10 @@
 # TruthfulQA Multi-Agent Evaluation
 
+## Llama3.1 + DeepSeek-R1 + Gemma
+Llama3.1 - Param: 8B - Size: 4.7GB
+DeepkSeek-R1 - Param: 7B - Size: 4.7GB
+Gemma - Param: 12B - Size: 8.1GB
+
 ## Overall Metrics
 - Average BLEU-1 Score: **0.1446**
 - Average BLEU-4 Score: **0.0924**

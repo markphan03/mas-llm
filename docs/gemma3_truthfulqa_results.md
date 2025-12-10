@@ -5,8 +5,8 @@
 - Average BLEU-4 Score: **0.1727**
 - Average ROUGE-1 Score: **0.3775**
 - Average ROUGE-L Score: **0.3433**
-
 - Average COMET Score: **0.6306**
+- Truthful accuracy: **0.5263157894736842**
 
 ## Per-Sample Results
 ### Sample 1

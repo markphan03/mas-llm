@@ -157,3 +157,5 @@ class Vote:
 
         # remove <think> for reasoning models
         return re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL)
+
+    
