@@ -35,14 +35,12 @@ np.random.seed(SEED)
 # =======================================
 #  SETUP AGENTS
 # =======================================
-embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-)
-NUMBER_OF_AGENTS = 3
+NUMBER_OF_AGENTS = 1
 agents = [
-    Agent(ChatOllama(model="llama3.1", seed=SEED), embd_model=embeddings, num_agents=NUMBER_OF_AGENTS, rank=1),
-    Agent(ChatOllama(model="deepseek-r1", seed=SEED), embd_model=embeddings, num_agents=NUMBER_OF_AGENTS, rank=2),
-    Agent(ChatOllama(model="mistral", seed=SEED), embd_model=embeddings, num_agents=NUMBER_OF_AGENTS, rank=3),
+    Agent(ChatOllama(model="deepseek-r1", seed=SEED), embd_model=None, num_agents=NUMBER_OF_AGENTS, rank=1),
+    # Agent(ChatOllama(model="deepseek-r1", seed=SEED), embd_model=embeddings, num_agents=NUMBER_OF_AGENTS, rank=2),
+    # Agent(ChatOllama(model="gemma3:12b", seed=SEED), embd_model=None, num_agents=NUMBER_OF_AGENTS, rank=3),
+    # Agent(ChatOllama(model="mistral", seed=SEED), embd_model=None, num_agents=NUMBER_OF_AGENTS, rank=3),
 ]
 
 vote_manager = Vote(agents=agents, method="approval")
@@ -219,7 +217,7 @@ for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
     results_json.append(entry)
 
 project_root = Path(__file__).parent.parent
-json_output_path = project_root / "docs" / "3llm_qwen_truthfulqa_results.json"
+json_output_path = project_root / "docs" / "deepseekr1_truthfulqa_results.json"
 
 with open(json_output_path, "w", encoding="utf-8") as jf:
     json.dump(results_json, jf, indent=4, ensure_ascii=False)
@@ -248,7 +246,7 @@ for i, (gold, pred) in enumerate(zip(gold_texts, pred_texts)):
     md.write(f"**Model Final Answer:**\n```\n{pred}\n```\n\n")
     md.write("---\n")
 
-doc_file = project_root / "docs" / "3llm_qwen_truthfulqa_results.md"
+doc_file = project_root / "docs" / "deepseekr1_truthfulqa_results.md"
 
 with open(doc_file, "w", encoding="utf-8") as f:
     f.write(md.getvalue())

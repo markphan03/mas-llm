@@ -1,18 +1,20 @@
 # agent.py
+import re
+import json
+
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models import BaseChatModel
+from langchain_core.embeddings import Embeddings
 
 from src.agents.base_agent import BaseAgent
 from src.graphstate import GraphState
 from src.agents.AGENT_PROMPTS import SYSTEM_PROMPTS
-
-import re
-import json
+from src.metrics.response_relevancy_scorer import ResponseRelevancyScorer
 
 
 class Agent(BaseAgent):
-    def __init__(self, base_model: BaseChatModel, num_agents: int, rank: int):
+    def __init__(self, base_model: BaseChatModel, num_agents: int, rank: int, embd_model: Embeddings = None):
         self.base_model = base_model
         self.rank = rank
         self.name = self.get_name()
@@ -29,6 +31,11 @@ class Agent(BaseAgent):
         # voting model
         voting_prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPTS["voting"])
         self.voting_ai = voting_prompt | base_model | StrOutputParser()
+
+        # embedding model + response relevancy scorer
+        self.embd_model = embd_model
+        self.response_relevancy_scorer = ResponseRelevancyScorer(self.embd_model)
+
 
     def reset(self):
         self.response = None
@@ -62,14 +69,16 @@ class Agent(BaseAgent):
 
         # Pull existing state for this agent
         agent_state = state["responses"].get(self.name, {})
-
+        question = state["question"]
+        context = state["context"]
+        example = state["example"]
         # ==========================================================
         # STEP 1 — Generate self response (only ONCE)
         # ==========================================================
         if agent_state.get("response") is None:
             self.response = self.genai.invoke({
-                "question": state["question"],
-                "context": state["context"]
+                "question": question,
+                "context": context
             })
 
         # ==========================================================
@@ -93,14 +102,26 @@ class Agent(BaseAgent):
 
             # Only vote when all other agents responded
             if len(self.other_responses) == self.num_agents - 1:
-
                 vote_raw = self.voting_ai.invoke({
-                    "question": state["question"],
-                    "context": state["context"],
+                    "question": question,
+                    "context": context,
                     "other_responses": self.other_responses
                 })
 
                 self.vote = self.extract_vote(vote_raw)
+                # Calculate Agent Score - TODO: Add Parallelism + Refactor code
+                if self.vote is not None:
+                    for agent, value in self.vote.items():
+                        agent_res = self.other_responses.get(agent, {})
+                        response_score = self.response_relevancy_scorer.calculate_response_relevancy(
+                            question=question,
+                            correct_example=example,
+                            response=agent_res      
+                        )
+                        self.vote[agent] = {
+                            "decision": value, # approval/reject
+                            "response_score": response_score # cosine similarity score of agent's response to question
+                        }
                 self.is_execute = False
 
         else:

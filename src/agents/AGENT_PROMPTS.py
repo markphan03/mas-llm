@@ -16,8 +16,8 @@ SYSTEM_PROMPTS = {
         You are an AI assistant for general question-answering tasks.
         Use the provided context to answer the user's question.
         Produce the best single final answer. Keep it concise and accurate.
-        {context} \n\n
-        {question} \n\n
+        Context: \n\n {context} \n\n
+        Question: {question} \n\n
     """,
     "voting": """
         You are one of multiple AI agents evaluating responses to a question.

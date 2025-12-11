@@ -1,5 +1,6 @@
 import re
 import random
+import math
 from typing import Literal, List
 
 from langchain_core.output_parsers import StrOutputParser
@@ -8,7 +9,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from src.graphstate import GraphState
 from src.agents.agent import Agent
 from src.agents.AGENT_PROMPTS import SYSTEM_PROMPTS
-
 
 
 class Vote:
@@ -31,6 +31,43 @@ class Vote:
         if self.num_agents <= 1:
             return False
         return self.voting_continue
+
+    # ----------------------------------------------------------------------
+    # Score Aggregation
+    # ----------------------------------------------------------------------
+    def _collect_weighted_scores(self, responses, agents):
+        """Collect approval votes from each agent. 
+        Each approval vote is weighted differently corresponding to the agent's response relevancy
+        For example, there is high-confident approval vote - low confident approval vote"""
+        scores = {agent: 0 for agent in agents}
+        for _, agent_res in responses.items():
+            votes = agent_res.get("vote", {})
+            if not votes:
+                continue
+
+            for agent_name, decision_meta in votes.items():
+                decision = decision_meta["decision"]
+                response_score = decision_meta["response_score"]
+                if agent_name in scores:
+                    if decision == "approve":
+                        bonus = 1 + response_score
+                        scores[agent_name] += bonus
+                    else:
+                        scores[agent_name] += response_score
+
+        return scores
+
+    # ----------------------------------------------------------------------
+    # Elimination Logic
+    # ----------------------------------------------------------------------
+    def _eliminate(self, scores):
+        """Keep all agents whose score >= avg score."""
+        avg = sum(scores.values()) / len(scores)
+        # print(avg)
+        # for agent, score in scores.items():
+        #     print(f"Agent - {agent} - Score - {score}")
+        # print([agent for agent, score in scores.items() if score >= avg])
+        return [agent for agent, score in scores.items() if score >= avg]
 
     # ----------------------------------------------------------------------
     # Voting Node Execution
@@ -59,45 +96,18 @@ class Vote:
         winners = state["winners"]
         responses = state["responses"]
 
-        scores = self._collect_scores(responses, winners)
+        scores = self._collect_weighted_scores(responses, winners)
         new_winners = self._eliminate(scores)
 
-        # stop when winners stop changing OR only 1 or 2 left
+        # stop when winners list stop changing OR floor of (half of winners) remain
         self.voting_continue = not (
-            len(new_winners) <= 2 or new_winners == winners
+            len(new_winners) <= math.floor(self.num_agents/2) or new_winners == winners
         )
 
         return {
             "winners": new_winners,
             "agent_scores": scores,
         }
-
-    # ----------------------------------------------------------------------
-    # Score Aggregation
-    # ----------------------------------------------------------------------
-    def _collect_scores(self, responses, agents):
-        """Collect approval votes from each agent."""
-        scores = {agent: 0 for agent in agents}
-
-        for _, agent_res in responses.items():
-            votes = agent_res.get("vote", {})
-            if not votes:
-                continue
-
-            for agent_name, decision in votes.items():
-                if decision == "approve":
-                    if agent_name in scores:
-                        scores[agent_name] += 1
-
-        return scores
-
-    # ----------------------------------------------------------------------
-    # Elimination Logic
-    # ----------------------------------------------------------------------
-    def _eliminate(self, scores):
-        """Keep all agents whose score >= avg score."""
-        avg = sum(scores.values()) / len(scores)
-        return [agent for agent, score in scores.items() if score >= avg]
 
     # ----------------------------------------------------------------------
     # FINAL ANSWER GENERATION
@@ -111,7 +121,7 @@ class Vote:
         question = state.get("question", "")
         context = state.get("context", "")
         responses = state.get("responses", {})
-        vote_counts = state.get("agent_scores", {})
+        agent_scores = state.get("agent_scores", {})
 
         # ============================================================
         # SPECIAL CASE — Only one agent in the system
@@ -124,9 +134,9 @@ class Vote:
         # ============================================================
         # Multi-agent final selection
         # ============================================================
-        max_votes = max(vote_counts.values())
-        winners = [agent for agent, score in vote_counts.items() if score == max_votes]
-        chosen_agent_name = random.choice(winners)
+        max_votes = max(agent_scores.values())
+        winners = [agent for agent, score in agent_scores.items() if score == max_votes]
+        chosen_agent_name = winners[0] if len(winners) == 1 else random.choice(winners) 
 
         agent_lookup = {f"agent_{a.rank}": a for a in agents}
         chosen_agent = agent_lookup[chosen_agent_name]
@@ -134,11 +144,13 @@ class Vote:
 
         response = chosen_agent_record.get("response", "")
         other_responses = chosen_agent_record.get("other_responses", {})
+        
         votes = chosen_agent_record.get("vote", {}) or {}
 
         formatted_responses = "\n\n"
         for agent_name, text in other_responses.items():
-            if votes.get(agent_name) == "approve":
+            # Safe: returns {} instead of None
+            if votes.get(agent_name, {}).get("decision") == "approve":
                 formatted_responses += f"{agent_name}: {text}\n"
 
         final_prompt = ChatPromptTemplate.from_template(
